@@ -270,6 +270,11 @@ func Multiply_dense_list(a mat.Dense, b []float64) []float64 {
 
 }
 
+type initAlgo_type struct{
+	index int
+	mu float64
+}
+
 func divide_list_float(l []float64, den float64) []float64 {
 	weights := []float64{}
 	for ind_i := 0; ind_i < len(l); ind_i++ {
@@ -278,24 +283,78 @@ func divide_list_float(l []float64, den float64) []float64 {
 	return weights
 }
 
-func CLA(cov_matrix []float64, expected_returns []float64) [][]float64 {
 
-	// Variables
+
+func sum_f64(array []float64) float64 {
+	result := 0.0
+	for _, v := range array {
+		result += v
+	}
+	return result
+}
+
+func initAlgo(mean []float64, lb []float64, uB []float64) ([]int, []float64) {
+
+	temp := []initAlgo_type{}
+	for ind_i := 0; ind_i < len(mean); ind_i++ {
+		temp = append(temp, initAlgo_type{ind_i, mean[ind_i]})
+	}
+	sort.Slice(temp, func(i, j int) bool { return temp[i].mu < temp[j].mu })
+	fmt.Println("By mu:", temp)
+
+	i := len(mean)
+	w := lb
+	fmt.Println("Debug : 1")
+	for {
+		if (i == 0) || sum_f64(w) <= 0 {
+			break
+		}
+		i = i - 1
+		w[temp[i].index] = uB[temp[i].index]
+		fmt.Println("Debug : 3 ", i, sum_f64(w), w[temp[i].index])
+	}
+	f := []int{}
+	w[temp[i].index] += 1 - sum_f64(w)
+	return append(f, temp[i].index), w
+}
+
+
+
+
+
+
+
+
+
+
+func CLA(covar []float64, mean []float64) [][]float64 {
+
+	// Global Variables
+
+	// Initialization
+	Y := []float64{} // gammas
+	lB := []float64{} // n size list containing lower bound of n assets
+	uB := []float64{} // n size list containing upper bound of n assets
+	λ_all := []float64{} // Lambdas
+	free_weights := []float64{}
+	turning_point_weights := []float64{0, 0, 0, 0}  // temporary varaible for weights
+	turning_points_weights := [][]float64{}   // solution
+	
+	
+
 	F := []float64{}
 	flag := true
-	λ_all := []float64{}
-	weights := []float64{0, 0, 0, 0} // make length constant
+	
 	λcurrent := math.Inf(1)
 	i_inside := math.NaN()
 	i_outside := math.NaN()
 	iteration := 0
-	turning_point_weights := []float64{}
-	turning_points_weights := [][]float64{}
+	
 
 	// j ← argmaxi μi
 	_, max_ind := findMaxElement(expected_returns) //verified
 	// w (1) j ← 1; ∀i 6= j : w (1) i ← 0
-	weights[max_ind] = 1 // verified
+	turning_point_weights[max_ind] = 1 // verified
 	// F ← {j}
 	F = append(F, float64(max_ind))
 	// until i inside = nil and i outside = nil
