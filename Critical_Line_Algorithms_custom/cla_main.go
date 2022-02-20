@@ -447,6 +447,14 @@ func Zeros(a int) []float64 {
 	return out
 }
 
+func Ones(a int) []float64 {
+	res := []float64{}
+	for ind_i := 0; ind_i < a; ind_i++ {
+		res = append(res, 0)
+	}
+	return res
+}
+
 func remove_from_list(slice []float64, s float64) []float64 {
 	out := []float64{}
 	for ind_i := 0; ind_i < len(slice); ind_i++ {
@@ -457,6 +465,67 @@ func remove_from_list(slice []float64, s float64) []float64 {
 	return out
 }
 
+func computeW(covarF_inv mat.Dense,
+	covarFB []float64,
+	meanF []float64,
+	wB []float64,
+	λ []float64) ([]float64, float64) {
+	fmt.Println("In fucntion compute W")
+
+	// g1=np.dot(np.dot(onesF.T,covarF_inv),meanF)
+	onesF := Identity_F(len(meanF))
+	_, row := onesF.Dims()
+	col, _ := covarF_inv.Dims()
+	// np.dot(onesF.T, covarF_inv)
+	g1_matrix := mat.NewDense(row, col, Multiply_mat_dense(onesF.T(), covarF_inv)) // To be verified
+	fmt.Println("G1 Debug :")
+	// c1 := mat.NewDense(row, col, Multiply_dense_dense(*c1_matrix, onesF))
+	g1 := Multiply_dense_list(*g1_matrix, meanF) // To be verified - scalar value required
+	fmt.Println(g1)
+
+	// g2=np.dot(np.dot(onesF.T,covarF_inv),onesF)
+	g2_matrix := mat.NewDense(row, col, Multiply_mat_dense(onesF.T(), covarF_inv)) // To be verified
+	fmt.Println("G1 Debug :")
+	// c1 := mat.NewDense(row, col, Multiply_dense_dense(*c1_matrix, onesF))
+	g2 := Multiply_dense_dense(*g2_matrix, onesF) // To be verified - scalar value required
+	fmt.Println(g2)
+
+	if len(wB) == 0 {
+		// g,w1=float(-self.l[-1]*g1/g2+1/g2),0
+		// g, w1 := λ[len(λ)-1]*g1/g2+1/g2, 0
+		g, w1 := 0, 0 // fix calculation references
+		fmt.Println(g, w1)
+	} else {
+		onesB := Identity_F(len(wB))
+		// g3 := np.dot(onesB.T,wB)
+		_, row := onesB.Dims()
+		col, _ := covarF_inv.Dims()
+		// np.dot(onesF.T, covarF_inv)
+		g3 := mat.NewDense(row, col, Multiply_mat_dense(onesB.T(), covarF_inv)) // To be verified
+
+		// g4=np.dot(covarF_inv,covarFB)
+		g4 := mat.NewDense(row, col, Multiply_dense_list(covarF_inv, covarFB)) // To be verified
+		// w1=np.dot(g4,wB)
+		w1 := Multiply_dense_mat(*g4, g3)
+		// g4=np.dot(onesF.T,w1)
+		g5 := Multiply_matrix_list(onesF.T(), w1)
+		fmt.Println("DEBUG g5 ", g5)
+		// g = float(-self.l[-1]*g1/g2 + (1-g3+g4)/g2)
+		// g = -1*λ[len(λ)-1]*g1/g2 + (1-g3+g5)/g2   // Fix Assignments to matrixs and lists
+		// g = 1.0
+	}
+
+	// w2 = np.dot(covarF_inv, onesF)
+	w2 := mat.NewDense(row, col, Multiply_dense_dense(covarF_inv, onesF))
+	// w3=np.dot(covarF_inv,meanF)
+	w3 := mat.NewDense(row, col, Multiply_dense_list(covarF_inv, meanF))
+	fmt.Println(" DEBUG ", w2, w3)
+	// return -w1 + g*w2 + self.l[-1]*w3, g // Fix assignments
+	temp := []float64{}
+	return append(temp, 1.0), 1.0
+
+}
+
 func CLA(covar []float64, mean []float64, lower_bound []float64, upper_bound []float64, NUM_ASSETS int) [][]float64 {
 
 	// Global Variables
@@ -464,6 +533,7 @@ func CLA(covar []float64, mean []float64, lower_bound []float64, upper_bound []f
 	/*
 		Notes :
 		1) Fix covar_inverse incorrect references ( covarF_inv_list_pre > covarF_inv_list)
+		2) check confusion between ones and identity.
 	*/
 
 	// // Initialization
@@ -536,11 +606,16 @@ func CLA(covar []float64, mean []float64, lower_bound []float64, upper_bound []f
 			}
 
 			// 3) compute minimum variance solution
+			var covarF_inv mat.Dense
+			covarFB := []float64{}
+			meanF := []float64{}
+			covarF := []float64{}
+			wB := []float64{}
 			if (l_in == math.NaN() || l_in < 0) && (l_out == math.NaN() || l_out < 0) {
 				λ = append(λ, 0)
-				covarF, _, meanF, _ := getMatrices(covar, f, NUM_ASSETS, mean, turning_points_weights)
+				covarF, covarFB, meanF, wB = getMatrices(covar, f, NUM_ASSETS, mean, turning_points_weights)
 				// covarF_inv=np.linalg.inv(covarF)
-				var covarF_inv mat.Dense
+
 				// Row and cols are tricky here
 				rows := len(covarF) / 2
 				cols := len(covarF) / 2
@@ -556,7 +631,7 @@ func CLA(covar []float64, mean []float64, lower_bound []float64, upper_bound []f
 				} else {
 					λ = append(λ, l_out)
 					f = append(f, i_out)
-					covarF, _, _, _ := getMatrices(covar, f, NUM_ASSETS, mean, turning_points_weights)
+					covarF, covarFB, _, wB = getMatrices(covar, f, NUM_ASSETS, mean, turning_points_weights)
 					// covarF_inv=np.linalg.inv(covarF)
 					var covarF_inv mat.Dense
 					// Row and cols are tricky here
@@ -569,8 +644,13 @@ func CLA(covar []float64, mean []float64, lower_bound []float64, upper_bound []f
 			}
 
 			// 5) compute solution vector
-			// wF,g=self.computeW(covarF_inv,covarFB,meanF,wB)
-
+			wF, gamma := computeW(covarF_inv, covarFB, meanF, wB, λ)
+			for ind_i := 0; ind_i < len(f); ind_i++ {
+				turning_point_weights[f[ind_i]] = wF[ind_i]
+			}
+			turning_points_weights = append(turning_points_weights, turning_point_weights)
+			Y = append(Y, gamma)
+			F = append(F, f)
 		}
 
 	}
